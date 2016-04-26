@@ -117,6 +117,7 @@ Info "Using distribution: ${TRAVIS_DEBIAN_DISTRIBUTION}"
 Info "Backports enabled: ${TRAVIS_DEBIAN_BACKPORTS}"
 Info "Experimental enabled: ${TRAVIS_DEBIAN_EXPERIMENTAL}"
 Info "Security updates enabled: ${TRAVIS_DEBIAN_SECURITY_UPDATES}"
+Info "Will use extra repository: ${TRAVIS_EXTRA_REPOSITORY:-<not set>}"
 Info "Will build under: ${TRAVIS_DEBIAN_BUILD_DIR}"
 Info "Will store results under: ${TRAVIS_DEBIAN_TARGET_DIR}"
 Info "Using mirror: ${TRAVIS_DEBIAN_MIRROR}"
@@ -175,13 +176,39 @@ RUN echo "deb-src ${TRAVIS_DEBIAN_MIRROR} experimental main" >> /etc/apt/sources
 EOF
 fi
 
+if [ "$(echo ${TRAVIS_EXTRA_REPOSITORY} | cut -c1-6)" = "https:" ]
+then
+	EXTRA_PACKAGES="apt-transport-https ca-certificates"
+fi
+
+if [ -n "${TRAVIS_EXTRA_REPOSITORY_GPG_URL}" ]
+then
+	EXTRA_PACKAGES="${EXTRA_PACKAGES} wget"
+fi
+
 cat >>Dockerfile <<EOF
 RUN apt-get update && apt-get dist-upgrade --yes
-RUN apt-get install --yes --no-install-recommends build-essential equivs devscripts git-buildpackage
+RUN apt-get install --yes --no-install-recommends build-essential equivs devscripts git-buildpackage ${EXTRA_PACKAGES}
 
 WORKDIR $(pwd)
 COPY . .
 EOF
+
+if [ -n "${TRAVIS_EXTRA_REPOSITORY_GPG_URL}" ]
+then
+	cat >>Dockerfile <<EOF
+RUN wget -O- "${TRAVIS_EXTRA_REPOSITORY_GPG_URL}" | apt-key add -
+EOF
+fi
+
+if [ -n "${TRAVIS_EXTRA_REPOSITORY}" ]
+then
+	cat >>Dockerfile <<EOF
+RUN echo "deb ${TRAVIS_EXTRA_REPOSITORY}" >> /etc/apt/sources.list
+RUN echo "deb-src ${TRAVIS_EXTRA_REPOSITORY}" >> /etc/apt/sources.list
+RUN apt-get update
+EOF
+fi
 
 if [ "${TRAVIS_DEBIAN_BACKPORTS}" = true ]
 then
